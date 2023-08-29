@@ -1,0 +1,80 @@
+version: "3.9"
+
+services:
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.traefik=true
+      - traefik.http.routers.traefik.rule=Host(`traefik.jmp.localhost`)
+      - traefik.http.routers.traefik.entrypoints=web
+      - traefik.http.services.traefik.loadbalancer.server.port=8080
+    command:
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+    ports:
+      - 80:80
+      - 8080:8080
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - traefik_default
+
+  vaultwarden:
+    image: vaultwarden/server:1.28.1
+    container_name: vaultwarden
+    hostname: vaultwarden
+    restart: unless-stopped
+    env_file:
+      - ".env"
+    ports:
+      - 8181:80
+    depends_on:
+      - mariadb
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.vaultwarden.rule=Host(`vaultwarden.jmp.localhost`)
+      - traefik.http.routers.vaultwarden.entrypoints=web
+      - traefik.http.services.vaultwarden.loadbalancer.server.port=80
+    environment:
+      - TZ=Europe/Zurich
+      - LOG_LEVEL=debug
+      - DATABASE_URL=${DATABASE_URL}
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+      - RUST_BACKTRACE=1
+    volumes:
+      - ./vw-data:/data
+    networks:
+      - traefik_default
+
+  mariadb:
+    image: mariadb:10.11
+    container_name: mariadb
+    hostname: mariadb
+    restart: always
+    env_file:
+      - ".env"
+    ports:
+      - 3306:3306
+    volumes:
+      - ./mariadb-data:/var/lib/mysql
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+    networks:
+      - traefik_default
+
+networks:
+  traefik_default: 
+    external: true
+
+volumes:
+ vw-data:
+ mariadb-data:
